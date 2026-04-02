@@ -1,0 +1,226 @@
+"""TP n1 pizarra"""
+from dataclasses import dataclass
+import py5
+
+WIDTH = 900
+HEIGHT = 600
+PALETTE_HEIGHT = 90
+DEFAULT_BRUSH_SIZE = 8
+MIN_BRUSH_SIZE = 1
+MAX_BRUSH_SIZE = 50
+BACKGROUND_COLOR = (245, 245, 245)
+TOOL_PENCIL = "Pencil"
+TOOL_ERASER = "Eraser"
+
+PALETTE_COLORS = [
+    (0, 0, 0),        # Negro
+    (30, 90, 220),    # Azul
+    (30, 170, 60),    # Verde
+    (220, 30, 30),    # Rojo
+    (255, 170, 0),    # Amarillo
+    (180, 0, 220),    # Violeta
+    (255, 100, 0),    # Naranja
+    (0, 200, 210),    # Celeste
+]
+
+@dataclass
+class BoardState:
+    """Estado centralizado de la pizarra."""
+    selected_color: tuple[int, int, int] = PALETTE_COLORS[0]
+    active_tool: str = TOOL_PENCIL
+    brush_size: int = DEFAULT_BRUSH_SIZE
+
+state = BoardState()
+color_buttons = []
+pencil_button = None  # (x, y, size)
+eraser_button = None  # (x, y, size)
+
+
+def draw_tool_icon_pencil(x, y, size, active) -> None:
+    """Dibuja un ícono de lápiz."""
+    py5.fill(220, 235, 255 if active else 255)
+    py5.stroke(30, 100, 255 if active else 50)
+    py5.stroke_weight(2 if active else 1)
+    py5.rect(x, y, size, size, 6)
+
+    if active:
+        py5.no_fill()
+        py5.stroke(30, 100, 255)
+        py5.stroke_weight(3)
+        py5.rect(x - 3, y - 3, size + 6, size + 6, 8)
+
+    cx = x + size // 2
+    cy = y + size // 2
+
+    # Cuerpo del lápiz
+    py5.fill(255, 220, 80)
+    py5.stroke(80)
+    py5.stroke_weight(1)
+    py5.begin_shape()
+    py5.vertex(cx - 5, cy - 14)
+    py5.vertex(cx + 5, cy - 14)
+    py5.vertex(cx + 5, cy + 8)
+    py5.vertex(cx - 5, cy + 8)
+    py5.end_shape(py5.CLOSE)
+
+    # Punta
+    py5.fill(255, 200, 150)
+    py5.begin_shape()
+    py5.vertex(cx - 5, cy + 8)
+    py5.vertex(cx + 5, cy + 8)
+    py5.vertex(cx, cy + 16)
+    py5.end_shape(py5.CLOSE)
+
+    # Goma arriba
+    py5.fill(255, 150, 150)
+    py5.rect(cx - 5, cy - 18, 10, 6, 2)
+
+    # Línea divisoria
+    py5.stroke(120)
+    py5.stroke_weight(1)
+    py5.line(cx - 5, cy - 12, cx + 5, cy - 12)
+
+
+def draw_tool_icon_eraser(x, y, size, active) -> None:
+    """Dibuja un ícono de goma de borrar."""
+    py5.fill(255, 225, 225 if active else 255)
+    py5.stroke(220 if active else 50, 50, 50)
+    py5.stroke_weight(2 if active else 1)
+    py5.rect(x, y, size, size, 6)
+
+    if active:
+        py5.no_fill()
+        py5.stroke(220, 50, 50)
+        py5.stroke_weight(3)
+        py5.rect(x - 3, y - 3, size + 6, size + 6, 8)
+
+    cx = x + size // 2
+    cy = y + size // 2
+
+    # Cuerpo de la goma
+    py5.fill(255, 180, 180)
+    py5.stroke(180, 80, 80)
+    py5.stroke_weight(1.5)
+    py5.rect(cx - 14, cy - 8, 28, 16, 3)
+
+    # Franja inferior
+    py5.fill(230, 100, 100)
+    py5.no_stroke()
+    py5.rect(cx - 14, cy + 2, 28, 6, 3)
+
+    # Línea de uso
+    py5.stroke(255, 255, 255, 180)
+    py5.stroke_weight(2)
+    py5.line(cx - 8, cy - 4, cx + 2, cy + 6)
+
+
+def reset_canvas() -> None:
+    """Limpia el área de dibujo y vuelve a dibujar la paleta."""
+    py5.background(*BACKGROUND_COLOR)
+    draw_palette()
+
+
+def draw_palette() -> None:
+    """Dibuja la franja de paleta, botones de color e íconos de herramientas."""
+    py5.no_stroke()
+    py5.fill(225)
+    py5.rect(0, 0, WIDTH, PALETTE_HEIGHT)
+
+    for x, y, size, color in color_buttons:
+        py5.fill(*color)
+        py5.stroke(50)
+        py5.stroke_weight(1)
+        py5.rect(x, y, size, size, 6)
+        if color == state.selected_color and state.active_tool == TOOL_PENCIL:
+            py5.no_fill()
+            py5.stroke(255)
+            py5.stroke_weight(3)
+            py5.rect(x - 3, y - 3, size + 6, size + 6, 8)
+
+    px, py_, psize = pencil_button
+    draw_tool_icon_pencil(px, py_, psize, state.active_tool == TOOL_PENCIL)
+
+    ex, ey, esize = eraser_button
+    draw_tool_icon_eraser(ex, ey, esize, state.active_tool == TOOL_ERASER)
+
+
+def setup() -> None:
+    """Inicializa la ventana, la paleta y el lienzo."""
+    global pencil_button, eraser_button
+
+    py5.size(WIDTH, HEIGHT)
+    button_size = 42
+    margin = 16
+    start_x = 20
+    y = (PALETTE_HEIGHT - button_size) // 2
+
+    for index, color in enumerate(PALETTE_COLORS):
+        x = start_x + index * (button_size + margin)
+        color_buttons.append((x, y, button_size, color))
+
+    last_x = start_x + len(PALETTE_COLORS) * (button_size + margin) + 10
+    pencil_button = (last_x, y, button_size)
+    eraser_button = (last_x + button_size + margin, y, button_size)
+
+    reset_canvas()
+
+
+def draw() -> None:
+    """Renderiza dibujo libre cuando el mouse está presionado."""
+    if py5.is_mouse_pressed and py5.mouse_y >= PALETTE_HEIGHT:
+        stroke_color = (
+            state.selected_color
+            if state.active_tool == TOOL_PENCIL
+            else BACKGROUND_COLOR
+        )
+        py5.stroke(*stroke_color)
+        py5.stroke_weight(state.brush_size)
+        py5.line(py5.pmouse_x, py5.pmouse_y, py5.mouse_x, py5.mouse_y)
+
+
+def mouse_pressed() -> None:
+    """Selecciona color o herramienta al hacer click en la paleta."""
+    if py5.mouse_y > PALETTE_HEIGHT:
+        return
+
+    px, py_, psize = pencil_button
+    if px <= py5.mouse_x <= px + psize and py_ <= py5.mouse_y <= py_ + psize:
+        state.active_tool = TOOL_PENCIL
+        draw_palette()
+        return
+
+    ex, ey, esize = eraser_button
+    if ex <= py5.mouse_x <= ex + esize and ey <= py5.mouse_y <= ey + esize:
+        state.active_tool = TOOL_ERASER
+        draw_palette()
+        return
+
+    for x, y, size, color in color_buttons:
+        if x <= py5.mouse_x <= x + size and y <= py5.mouse_y <= y + size:
+            state.selected_color = color
+            state.active_tool = TOOL_PENCIL
+            draw_palette()
+            break
+
+
+def key_pressed() -> None:
+    """Gestiona limpieza, cambio de herramientas y grosor de trazo."""
+    if py5.key and py5.key.lower() == "p":
+        state.active_tool = TOOL_PENCIL
+        draw_palette()
+        return
+    if py5.key and py5.key.lower() == "e":
+        state.active_tool = TOOL_ERASER
+        draw_palette()
+        return
+    if py5.key and py5.key == "+":
+        state.brush_size = min(MAX_BRUSH_SIZE, state.brush_size + 1)
+        return
+    if py5.key and py5.key == "-":
+        state.brush_size = max(MIN_BRUSH_SIZE, state.brush_size - 1)
+        return
+    if py5.key and py5.key.lower() == "c":
+        reset_canvas()
+
+
+py5.run_sketch()
